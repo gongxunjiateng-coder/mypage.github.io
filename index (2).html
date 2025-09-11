@@ -2,24 +2,62 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>マイ投資リスト</title>
+  <title>投資シミュレーション</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    table { border-collapse: collapse; width: 60%; }
-    th, td { border: 1px solid #aaa; padding: 8px; text-align: left; }
-    th { background: #f0f0f0; }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    input { margin: 5px; }
+    canvas { max-width: 800px; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1>投資銘柄リスト</h1>
-  <table id="stock-table">
-    <tr><th>銘柄</th><th>株価</th><th>メモ</th></tr>
-    <tr><td>トヨタ</td><td>2500</td><td>長期保有</td></tr>
-    <tr><td>任天堂</td><td>7000</td><td>ゲーム需要</td></tr>
-  </table>
+  <h1>投資シミュレーション（架空銘柄）</h1>
+
+  <label>初期投資額: </label><input type="number" id="initial" value="100000"><br>
+  <label>年間利回り(％): </label><input type="number" id="rate" value="5"><br>
+  <label>期間(年): </label><input type="number" id="years" value="10"><br>
+  <button onclick="simulate()">シミュレーション開始</button>
+
+  <canvas id="chart"></canvas>
 
   <script>
-    console.log("マイ投資リストサイトが読み込まれました");
+    function simulate() {
+      const initial = parseFloat(document.getElementById('initial').value);
+      const rate = parseFloat(document.getElementById('rate').value) / 100;
+      const years = parseInt(document.getElementById('years').value);
+
+      let values = [initial];
+      for(let i = 1; i <= years; i++){
+        // 株価変動をランダムでシミュレーション
+        const volatility = 0.1; // ±10%ランダム変動
+        const change = (Math.random() * 2 - 1) * volatility;
+        const newValue = values[i-1] * (1 + rate + change);
+        values.push(newValue);
+      }
+
+      const ctx = document.getElementById('chart').getContext('2d');
+      if(window.myChart) window.myChart.destroy(); // 前のチャート削除
+      window.myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: Array.from({length: years+1}, (_, i) => i),
+          datasets: [{
+            label: '投資額推移',
+            data: values,
+            borderColor: 'green',
+            backgroundColor: 'rgba(0,128,0,0.2)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          scales: {
+            x: { title: { display: true, text: '年' } },
+            y: { title: { display: true, text: '投資額 (円)' } }
+          }
+        }
+      });
+    }
   </script>
 </body>
 </html>
