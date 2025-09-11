@@ -1,63 +1,149 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>投資シミュレーション</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    input { margin: 5px; }
-    canvas { max-width: 800px; margin-top: 20px; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>最高峰 日本株投資シミュレーション</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { font-family: Arial; background-color: #f4f4f9; padding: 20px; }
+h1,h2 { color: #4CAF50; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+th { background-color: #4CAF50; color: white; }
+input, select { width: 100px; }
+button { padding: 5px 10px; margin-top: 10px; margin-right:5px; }
+</style>
 </head>
 <body>
-  <h1>投資シミュレーション（架空銘柄）</h1>
 
-  <label>初期投資額: </label><input type="number" id="initial" value="100000"><br>
-  <label>年間利回り(％): </label><input type="number" id="rate" value="5"><br>
-  <label>期間(年): </label><input type="number" id="years" value="10"><br>
-  <button onclick="simulate()">シミュレーション開始</button>
+<h1>日本株個別株投資シミュレーション（NISA対応）</h1>
+<p>複数銘柄・NISA口座・課税口座対応。利益グラフも表示。</p>
 
-  <canvas id="chart"></canvas>
+<table>
+<thead>
+<tr>
+<th>銘柄名</th>
+<th>業種</th>
+<th>購入株価(円)</th>
+<th>株数</th>
+<th>売却価格(円)</th>
+<th>口座</th>
+<th>投資額(円)</th>
+<th>利益(円)</th>
+<th>非課税利益(円)</th>
+</tr>
+</thead>
+<tbody id="stockTable"></tbody>
+</table>
 
-  <script>
-    function simulate() {
-      const initial = parseFloat(document.getElementById('initial').value);
-      const rate = parseFloat(document.getElementById('rate').value) / 100;
-      const years = parseInt(document.getElementById('years').value);
+<button onclick="addRow()">銘柄追加</button>
+<button onclick="calculate()">利益計算</button>
+<button onclick="saveData()">保存</button>
+<button onclick="loadData()">読み込み</button>
 
-      let values = [initial];
-      for(let i = 1; i <= years; i++){
-        // 株価変動をランダムでシミュレーション
-        const volatility = 0.1; // ±10%ランダム変動
-        const change = (Math.random() * 2 - 1) * volatility;
-        const newValue = values[i-1] * (1 + rate + change);
-        values.push(newValue);
-      }
+<h2>総合計</h2>
+<p>総投資額: <span id="totalInvestment">0</span> 円</p>
+<p>総利益: <span id="totalProfit">0</span> 円</p>
+<p>総非課税利益(NISA): <span id="totalNisa">0</span> 円</p>
 
-      const ctx = document.getElementById('chart').getContext('2d');
-      if(window.myChart) window.myChart.destroy(); // 前のチャート削除
-      window.myChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: Array.from({length: years+1}, (_, i) => i),
-          datasets: [{
-            label: '投資額推移',
-            data: values,
-            borderColor: 'green',
-            backgroundColor: 'rgba(0,128,0,0.2)',
-            fill: true,
-            tension: 0.3
-          }]
-        },
-        options: {
-          scales: {
-            x: { title: { display: true, text: '年' } },
-            y: { title: { display: true, text: '投資額 (円)' } }
-          }
-        }
-      });
-    }
-  </script>
+<canvas id="profitChart" width="400" height="200"></canvas>
+
+<script>
+// 初期行
+function addRow(data={}){
+  const table=document.getElementById('stockTable');
+  const row=table.insertRow();
+  const defaults={name:'', sector:'', price:0, qty:0, sell:0, account:'nisa'};
+  data={...defaults, ...data};
+  row.innerHTML=`
+    <td><input type="text" value="${data.name}" placeholder="銘柄名"></td>
+    <td><input type="text" value="${data.sector}" placeholder="業種"></td>
+    <td><input type="number" value="${data.price}"></td>
+    <td><input type="number" value="${data.qty}"></td>
+    <td><input type="number" value="${data.sell}"></td>
+    <td>
+      <select>
+        <option value="nisa" ${data.account==='nisa'?'selected':''}>NISA</option>
+        <option value="taxable" ${data.account==='taxable'?'selected':''}>課税口座</option>
+      </select>
+    </td>
+    <td class="investment">0</td>
+    <td class="profit">0</td>
+    <td class="nisaProfit">0</td>
+  `;
+}
+
+// 計算
+function calculate(){
+  const table=document.getElementById('stockTable');
+  let totalInvestment=0, totalProfit=0, totalNisa=0;
+  const labels=[], profits=[];
+  for(let i=0;i<table.rows.length;i++){
+    const row=table.rows[i];
+    const price=parseFloat(row.cells[2].firstChild.value)||0;
+    const qty=parseInt(row.cells[3].firstChild.value)||0;
+    const sell=parseFloat(row.cells[4].firstChild.value)||0;
+    const account=row.cells[5].firstChild.value;
+    const investment=price*qty;
+    let profit=(sell-price)*qty;
+    let nisaProfit=0;
+    if(account==='nisa'){ nisaProfit=profit; } 
+    else { profit*=0.79685; } // 課税口座税引後
+    row.cells[6].innerText=investment.toLocaleString();
+    row.cells[7].innerText=profit.toLocaleString();
+    row.cells[8].innerText=nisaProfit.toLocaleString();
+    totalInvestment+=investment;
+    totalProfit+=profit;
+    totalNisa+=nisaProfit;
+
+    labels.push(row.cells[0].firstChild.value||'銘柄'+(i+1));
+    profits.push(profit+nisaProfit);
+  }
+  document.getElementById('totalInvestment').innerText=totalInvestment.toLocaleString();
+  document.getElementById('totalProfit').innerText=totalProfit.toLocaleString();
+  document.getElementById('totalNisa').innerText=totalNisa.toLocaleString();
+
+  // グラフ
+  const ctx=document.getElementById('profitChart').getContext('2d');
+  if(window.chart) window.chart.destroy();
+  window.chart=new Chart(ctx,{
+    type:'bar',
+    data:{labels:labels,datasets:[{label:'利益',data:profits,backgroundColor:'#4CAF50'}]},
+    options:{responsive:true,plugins:{legend:{display:false}}}
+  });
+}
+
+// ローカル保存
+function saveData(){
+  const table=document.getElementById('stockTable');
+  const data=[];
+  for(let i=0;i<table.rows.length;i++){
+    const row=table.rows[i];
+    data.push({
+      name:row.cells[0].firstChild.value,
+      sector:row.cells[1].firstChild.value,
+      price:parseFloat(row.cells[2].firstChild.value)||0,
+      qty:parseInt(row.cells[3].firstChild.value)||0,
+      sell:parseFloat(row.cells[4].firstChild.value)||0,
+      account:row.cells[5].firstChild.value
+    });
+  }
+  localStorage.setItem('stocks',JSON.stringify(data));
+  alert('データを保存しました');
+}
+
+// 読み込み
+function loadData(){
+  const data=JSON.parse(localStorage.getItem('stocks')||'[]');
+  document.getElementById('stockTable').innerHTML='';
+  data.forEach(d=>addRow(d));
+  calculate();
+}
+
+// 初期1行
+addRow();
+</script>
+
 </body>
 </html>
